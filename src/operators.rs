@@ -1,3 +1,5 @@
+use std::f32::consts::E;
+
 use crate::tensor::Tensor;
 
 // get (row) vectors from a 2D table given a list of indices
@@ -71,25 +73,73 @@ pub fn masked_softmax(y: &mut Tensor<f32>) {
 }
 
 pub fn rms_norm(y: &mut Tensor<f32>, x: &Tensor<f32>, w: &Tensor<f32>, epsilon: f32) {
-    todo!("实现 rms_norm，计算前做一些必要的检查会帮助你后续调试")
+    let n = w.size();
+    let tile_count = x.size() / n;
+    assert!(x.size() % n == 0);
+    assert_eq!(x.size(), y.size());
+
+    let y_ = unsafe {y.data_mut()};
+    let x_ = x.data();
+    let w_ = w.data();
+
+    for i in 0..tile_count {
+        let mut sum = 0f32;
+        for j in 0..n {
+            sum += x_[i*n + j] * x_[i*n + j];
+        }
+        sum /= n as f32;
+        sum += epsilon;
+        sum = sum.sqrt();
+        for j in 0..n {
+            y_[i*n + j] = x_[i*n + j] * w_[j] / sum;
+        }
+    }
 }
 
 // y = silu(x) * y
 // hint: this is an element-wise operation
 pub fn swiglu(y: &mut Tensor<f32>, x: &Tensor<f32>) {
-    // let len = y.size();
-    // assert!(len == x.size());
+    assert!(y.size() == x.size());
 
-    // let _y = unsafe { y.data_mut() };
-    // let _x = x.data();
+    let y_ = unsafe { y.data_mut() };
+    let x_ = x.data();
 
-    todo!("实现 silu，这里给了一些前期准备工作的提示，你可以参考")
+    for i in 0..x_.len() {
+        y_[i] = (1f32 / (1f32 + (-x_[i]).exp())) * x_[i] * y_[i];
+    }
 }
 
 // C = beta * C + alpha * A @ B^T
 // hint: You don't need to do an explicit transpose of B
 pub fn matmul_transb(c: &mut Tensor<f32>, beta: f32, a: &Tensor<f32>, b: &Tensor<f32>, alpha: f32) {
-    todo!("实现 matmul_transb，计算前做一些必要的检查会帮助你后续调试");
+    let c_s = c.shape();
+    let b_s = b.shape();
+    let a_s = a.shape();
+    assert_eq!(c_s.len(), 2);
+    assert_eq!(a_s.len(), 2);
+    assert_eq!(b_s.len(), 2);
+    let m = a_s[0];
+    let n = b_s[0];
+    assert_eq!(a_s[1], b_s[1]);
+    let o = a_s[1];
+    assert_eq!(c_s[0], m);
+    assert_eq!(c_s[1], n);
+
+    let c_ = unsafe { c.data_mut() };
+    let a_ = a.data();
+    let b_ = b.data();
+
+    // c_.iter_mut().for_each(|x| *x = *x * beta);
+
+    for i in 0..m {
+        for j in 0..n {
+            let mut s = 0f32;
+            for k in 0..o {
+                s += a_[i*o + k] * b_[j*o + k];
+            }
+            c_[i*n + j] = s + c_[i*n + j];
+        }
+    }
 }
 
 // Dot product of two tensors (treated as vectors)
